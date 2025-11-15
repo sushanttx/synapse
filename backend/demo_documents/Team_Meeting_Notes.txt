@@ -1,0 +1,37 @@
+Meeting: Marketing Sync
+Date: 2024-11-12
+Attendees: Sarah, Mark, Chloe, Ben
+
+--- AGENDA ---
+1. Review Q4 Campaign Performance (to date)
+2. Project X - Phase 2 Planning
+3. Project Y - Q1 2025 Roadmap
+4. AOB
+
+--- NOTES ---
+
+1. Q4 Campaign:
+- Holiday campaign is live.
+- Engagement is high, but clicks to the landing page are low.
+- Conversion rate is 1.2% (Target: 2.0%).
+- ACTION (Mark): A/B test the email subject lines.
+- ACTION (Chloe): Tweak the ad creative to be more direct about the 15% offer.
+
+2. Project X - Phase 2:
+- Phase 1 (launch) was a success. We hit 90% of our sign-up goal.
+- Phase 2 is all about CONVERSION. Turning trial users into paid.
+- We need a new email nurture sequence for trial users.
+- Ben: "The product team is shipping the new 'Reports' feature on Dec 1. We MUST include this in our messaging."
+- ACTION (Sarah): Draft the new "Trial Nurture" sequence.
+- ACTION (Ben): Get final specs for the 'Reports' feature from product.
+
+3. Project Y - Q1 2025:
+- Project Y is stable, but usage is flat.
+- We need a re-engagement campaign.
+- Idea: "Did you know Project Y could do this?"
+- Focus on 3 hidden-gem features.
+- ACTION (Chloe): Pull a list of users who haven't logged in for 60+ days.
+
+--- OTHER ---
+- We need to order new swag for the Feb 2025 trade show.
+- Next meeting is moved to Tuesday.
