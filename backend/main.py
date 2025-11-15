@@ -6,15 +6,20 @@ Provides semantic search endpoint for marketing documents
 # Patch websockets before importing supabase
 import websockets_patch  # noqa: F401
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 import os
+from typing import Dict, Optional
+import tempfile
+from pathlib import Path
 from supabase import create_client, Client
 from typing import List, Optional
 import uvicorn
 from dotenv import load_dotenv
+import pdfplumber
+from docx import Document
 
 # Load environment variables from .env file
 load_dotenv()
@@ -258,6 +263,225 @@ async def get_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
+
+
+# Helper functions for file processing (reused from ingest.py)
+def extract_text_from_pdf(file_path: Path) -> str:
+    """Extract text from a PDF file"""
+    try:
+        text = ""
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ""
+        return text
+    except Exception as e:
+        raise ValueError(f"Error reading PDF: {e}")
+
+
+def extract_text_from_docx(file_path: Path) -> str:
+    """Extract text from a DOCX file"""
+    try:
+        doc = Document(file_path)
+        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        return text
+    except Exception as e:
+        raise ValueError(f"Error reading DOCX: {e}")
+
+
+def extract_text_from_txt(file_path: Path) -> str:
+    """Extract text from a TXT file"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        raise ValueError(f"Error reading TXT: {e}")
+
+
+def extract_text_from_md(file_path: Path) -> str:
+    """Extract text from a Markdown file"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        raise ValueError(f"Error reading MD: {e}")
+
+
+def extract_text(file_path: Path) -> str:
+    """Extract text from a file based on its extension"""
+    suffix = file_path.suffix.lower()
+    
+    if suffix == '.pdf':
+        return extract_text_from_pdf(file_path)
+    elif suffix == '.docx':
+        return extract_text_from_docx(file_path)
+    elif suffix == '.txt':
+        return extract_text_from_txt(file_path)
+    elif suffix == '.md':
+        return extract_text_from_md(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {suffix}")
+
+
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
+    """Split text into overlapping chunks"""
+    if len(text) <= chunk_size:
+        return [text]
+    
+    chunks = []
+    start = 0
+    
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        chunks.append(chunk)
+        start = end - overlap
+        if start >= len(text):
+            break
+    
+    return chunks
+
+
+def categorize_document(text: str, filename: str = "") -> Dict[str, Optional[str]]:
+    """Free rule-based categorization using keyword matching"""
+    text_lower = text.lower()
+    filename_lower = filename.lower()
+    combined_text = f"{filename_lower} {text_lower}"
+    
+    topic = None
+    topic_scores = {"Strategy": 0, "Content": 0, "Report": 0, "Brief": 0}
+    
+    strategy_keywords = ["strategy", "strategic", "plan", "planning", "roadmap", "vision",
+                        "objective", "goal", "mission", "approach", "framework", "methodology"]
+    for keyword in strategy_keywords:
+        if keyword in combined_text:
+            topic_scores["Strategy"] += 1
+    
+    content_keywords = ["content", "blog", "post", "article", "calendar", "schedule",
+                        "editorial", "publishing", "social media", "social", "campaign",
+                        "email", "newsletter", "draft", "writing"]
+    for keyword in content_keywords:
+        if keyword in combined_text:
+            topic_scores["Content"] += 1
+    
+    report_keywords = ["report", "results", "performance", "metrics", "analytics", "data",
+                       "analysis", "summary", "findings", "insights", "quarterly", "q1", "q2",
+                       "q3", "q4", "roi", "conversion", "engagement", "campaign results"]
+    for keyword in report_keywords:
+        if keyword in combined_text:
+            topic_scores["Report"] += 1
+    
+    brief_keywords = ["brief", "briefing", "overview", "summary", "outline", "proposal",
+                      "project brief", "campaign brief", "creative brief"]
+    for keyword in brief_keywords:
+        if keyword in combined_text:
+            topic_scores["Brief"] += 1
+    
+    if max(topic_scores.values()) > 0:
+        topic = max(topic_scores, key=topic_scores.get)
+    
+    project = None
+    project_x_keywords = ["project x", "projectx", "proj x", "projx"]
+    for keyword in project_x_keywords:
+        if keyword in combined_text:
+            project = "Project X"
+            break
+    
+    if not project:
+        project_y_keywords = ["project y", "projecty", "proj y", "projy"]
+        for keyword in project_y_keywords:
+            if keyword in combined_text:
+                project = "Project Y"
+                break
+    
+    if not project:
+        if "internal" in combined_text or "team" in combined_text or "meeting" in combined_text:
+            project = "Internal"
+    
+    return {"topic": topic, "project": project}
+
+
+@app.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    topic: Optional[str] = Form(None),
+    project: Optional[str] = Form(None)
+):
+    """
+    Upload and ingest a document file
+    
+    Supported formats: PDF, DOCX, TXT, MD
+    Optionally provide topic and project for categorization
+    """
+    # Validate file type
+    allowed_extensions = ['.pdf', '.docx', '.txt', '.md']
+    file_extension = Path(file.filename).suffix.lower()
+    
+    if file_extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    try:
+        # Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+            content = await file.read()
+            tmp_file.write(content)
+            tmp_file_path = Path(tmp_file.name)
+        
+        try:
+            # Extract text
+            text = extract_text(tmp_file_path)
+            if not text.strip():
+                raise HTTPException(status_code=400, detail="No text could be extracted from the file")
+            
+            # Auto-categorize if topic/project not provided
+            if topic is None or project is None:
+                categorization = categorize_document(text, file.filename)
+                topic = topic or categorization.get("topic")
+                project = project or categorization.get("project")
+            
+            # Chunk text
+            chunks = chunk_text(text, chunk_size=500, overlap=100)
+            
+            # Generate embeddings
+            embeddings = model.encode(chunks, show_progress_bar=False)
+            
+            # Prepare records for batch insert
+            records = []
+            for chunk, embedding in zip(chunks, embeddings):
+                records.append({
+                    "content": chunk,
+                    "source": file.filename,
+                    "embedding": embedding.tolist(),
+                    "topic": topic,
+                    "project": project
+                })
+            
+            # Insert into Supabase
+            response = supabase.table('documents').insert(records).execute()
+            
+            # Clean up temporary file
+            tmp_file_path.unlink()
+            
+            return {
+                "success": True,
+                "filename": file.filename,
+                "chunks_created": len(records),
+                "topic": topic,
+                "project": project,
+                "message": f"Successfully ingested {file.filename} with {len(records)} chunks"
+            }
+            
+        except ValueError as e:
+            tmp_file_path.unlink()  # Clean up on error
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            tmp_file_path.unlink()  # Clean up on error
+            raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 
 if __name__ == "__main__":

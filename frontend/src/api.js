@@ -83,4 +83,80 @@ export async function getProjects() {
   }
 }
 
+/**
+ * Upload a file to the system
+ * @param {File} file - The file to upload
+ * @param {string} topic - Optional topic for the document
+ * @param {string} project - Optional project for the document
+ * @param {Function} onProgress - Optional progress callback (progress: number)
+ * @returns {Promise<Object>} Upload response with success status and details
+ */
+export async function uploadFile(file, topic = null, project = null, onProgress = null) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (topic) formData.append('topic', topic);
+  if (project) formData.append('project', project);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    // Track upload progress
+    if (onProgress) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          onProgress(percentComplete);
+        }
+      });
+    }
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch (e) {
+          resolve({ success: true, message: 'File uploaded successfully' });
+        }
+      } else {
+        try {
+          const errorData = JSON.parse(xhr.responseText);
+          reject(new Error(errorData.detail || `Upload failed: ${xhr.statusText}`));
+        } catch (e) {
+          reject(new Error(`Upload failed: ${xhr.statusText}`));
+        }
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during upload'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      reject(new Error('Upload cancelled'));
+    });
+
+    xhr.open('POST', `${API_BASE_URL}/upload`);
+    xhr.send(formData);
+  });
+}
+
+/**
+ * Get statistics about the indexed documents
+ * @returns {Promise<Object>} Stats object with total_chunks, total_files, files, topics, projects
+ */
+export async function getStats() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/stats`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch stats: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    throw error;
+  }
+}
+
 

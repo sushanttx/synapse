@@ -1,27 +1,33 @@
 import { useState, useEffect } from 'react'
 import { searchDocuments, getTopics, getProjects } from './api'
+import FileUpload from './components/FileUpload'
+import Stats from './components/Stats'
 
 function App() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
+  const [files, setFiles] = useState([])
   const [totalResults, setTotalResults] = useState(0)
+  const [totalFiles, setTotalFiles] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selectedTopic, setSelectedTopic] = useState('')
   const [selectedProject, setSelectedProject] = useState('')
   const [topics, setTopics] = useState([])
   const [projects, setProjects] = useState([])
+  const [showStats, setShowStats] = useState(false)
 
   // Load topics and projects on mount
+  const loadFilters = async () => {
+    const [topicsData, projectsData] = await Promise.all([
+      getTopics(),
+      getProjects(),
+    ])
+    setTopics(topicsData)
+    setProjects(projectsData)
+  }
+
   useEffect(() => {
-    const loadFilters = async () => {
-      const [topicsData, projectsData] = await Promise.all([
-        getTopics(),
-        getProjects(),
-      ])
-      setTopics(topicsData)
-      setProjects(projectsData)
-    }
     loadFilters()
   }, [])
 
@@ -35,7 +41,9 @@ function App() {
     setLoading(true)
     setError(null)
     setResults([])
+    setFiles([])
     setTotalResults(0)
+    setTotalFiles(0)
 
     try {
       const response = await searchDocuments(query, {
@@ -43,7 +51,9 @@ function App() {
         project: selectedProject || null,
       })
       setResults(response.results || [])
+      setFiles(response.files || [])
       setTotalResults(response.total_results || 0)
+      setTotalFiles(response.total_files || 0)
     } catch (err) {
       setError(err.message || 'Failed to search documents. Please try again.')
       console.error('Search error:', err)
@@ -52,9 +62,25 @@ function App() {
     }
   }
 
+  const handleUploadSuccess = async () => {
+    // Refresh filters after upload
+    await loadFilters()
+    // Optionally refresh stats if shown
+    if (showStats) {
+      // Stats component will handle its own refresh
+    }
+  }
+
   const formatSimilarity = (similarity) => {
     // Similarity is already a percentage (0-100) from the backend
     return typeof similarity === 'number' ? Math.round(similarity) : similarity
+  }
+
+  const getSimilarityColor = (similarity) => {
+    const score = typeof similarity === 'number' ? similarity : parseFloat(similarity)
+    if (score >= 80) return 'bg-green-100 text-green-800'
+    if (score >= 60) return 'bg-yellow-100 text-yellow-800'
+    return 'bg-red-100 text-red-800'
   }
 
   return (
@@ -62,17 +88,41 @@ function App() {
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-slate-800">
-            Synapse: Marketing Search
-          </h1>
-          <p className="text-slate-600 mt-1">
-            Smart semantic search for your marketing documents
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-800">
+                Synapse: Marketing Search
+              </h1>
+              <p className="text-slate-600 mt-1">
+                Smart semantic search for your marketing documents
+              </p>
+            </div>
+            <button
+              onClick={() => setShowStats(!showStats)}
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium"
+            >
+              {showStats ? 'Hide Stats' : 'Show Stats'}
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
+        {/* Stats Section */}
+        {showStats && (
+          <div className="mb-8">
+            <Stats />
+          </div>
+        )}
+
+        {/* File Upload Section */}
+        <FileUpload
+          onUploadSuccess={handleUploadSuccess}
+          topics={topics}
+          projects={projects}
+        />
+
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="mb-8">
           <div className="relative mb-4">
@@ -145,8 +195,94 @@ function App() {
           </div>
         )}
 
-        {/* Results */}
-        {!loading && results.length > 0 && (
+        {/* Results - Grouped by File */}
+        {!loading && files.length > 0 && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-slate-800">
+                Search Results ({totalResults} chunks from {totalFiles} files)
+              </h2>
+            </div>
+            {files.map((file, fileIndex) => (
+              <div
+                key={file.file_name || fileIndex}
+                className="bg-white rounded-lg shadow-md border border-slate-200 p-6 hover:shadow-lg transition-shadow"
+              >
+                {/* File Header */}
+                <div className="mb-4 flex items-start justify-between gap-4 pb-4 border-b border-slate-200">
+                  <div className="flex-1">
+                    <a
+                      href={`#${file.file_name}`}
+                      className="text-xl font-semibold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-2"
+                    >
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      {file.file_name}
+                    </a>
+                    <div className="flex gap-2 mt-2">
+                      {file.topic && (
+                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                          {file.topic}
+                        </span>
+                      )}
+                      {file.project && (
+                        <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                          {file.project}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span
+                    className={`px-3 py-1 text-sm font-semibold rounded-full ${getSimilarityColor(
+                      file.best_similarity
+                    )}`}
+                  >
+                    {formatSimilarity(file.best_similarity)}% match
+                  </span>
+                </div>
+
+                {/* Chunks for this file */}
+                <div className="space-y-3">
+                  {file.chunks && file.chunks.length > 0 ? (
+                    file.chunks.map((chunk, chunkIndex) => (
+                      <div
+                        key={chunk.id || chunkIndex}
+                        className="p-4 bg-slate-50 rounded-lg border border-slate-100"
+                      >
+                        <p className="text-slate-700 mb-3 leading-relaxed">
+                          {chunk.content}
+                        </p>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                          <span className="text-xs text-slate-500">
+                            Similarity: <span className="font-semibold text-slate-700">
+                              {formatSimilarity(chunk.similarity)}%
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-slate-500 text-sm">No chunks available</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Fallback: Individual Results (if files array not available) */}
+        {!loading && results.length > 0 && files.length === 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800">
@@ -214,7 +350,7 @@ function App() {
         )}
 
         {/* No Results */}
-        {!loading && results.length === 0 && query && !error && (
+        {!loading && results.length === 0 && files.length === 0 && query && !error && (
           <div className="text-center py-12">
             <p className="text-slate-600 text-lg">
               No results found. Try rephrasing your query.
@@ -223,7 +359,7 @@ function App() {
         )}
 
         {/* Empty State */}
-        {!loading && results.length === 0 && !query && !error && (
+        {!loading && results.length === 0 && files.length === 0 && !query && !error && (
           <div className="text-center py-12">
             <svg
               className="w-16 h-16 mx-auto text-slate-400 mb-4"
