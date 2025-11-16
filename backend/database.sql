@@ -86,3 +86,4 @@ $$;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON documents TO authenticated;
 
 
+

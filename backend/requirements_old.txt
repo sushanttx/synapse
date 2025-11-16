@@ -1,0 +1,29 @@
+fastapi>=0.109.0  # upgraded to support anyio 4.x
+uvicorn[standard]>=0.24.0
+python-multipart==0.0.6
+python-dotenv==1.0.1
+starlette>=0.27.0
+
+# Supabase Python Client - upgraded to latest version
+supabase>=2.24.0    # Latest version supports httpx>=0.26
+httpx>=0.26.0,<0.29.0  # Compatible with Supabase 2.24+
+anyio>=4.0.0        # Compatible with FastAPI 0.109+
+websockets>=11.0,<12.0  # realtime requires <12.0 (API change in 12.0)
+
+# Embeddings
+sentence-transformers==3.0.1
+torch==2.2.0
+torchvision==0.17.0
+huggingface-hub==0.22.2
+nltk==3.8.1
+scikit-learn==1.5.0
+scipy==1.13.1
+sentencepiece==0.2.0
+tqdm==4.66.4
+
+# PDF + Word
+pdfplumber==0.11.0
+python-docx==0.8.11
+
+# Utils
+numpy==1.26.4
