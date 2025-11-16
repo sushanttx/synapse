@@ -18,18 +18,18 @@ function App() {
   const [showStats, setShowStats] = useState(false)
 
   // Load topics and projects on mount
-  const loadFilters = async () => {
-    const [topicsData, projectsData] = await Promise.all([
-      getTopics(),
-      getProjects(),
-    ])
-    setTopics(topicsData)
-    setProjects(projectsData)
-  }
+  // const loadFilters = async () => {
+  //   const [topicsData, projectsData] = await Promise.all([
+  //     getTopics(),
+  //     getProjects(),
+  //   ])
+  //   setTopics(topicsData)
+  //   setProjects(projectsData)
+  // }
 
-  useEffect(() => {
-    loadFilters()
-  }, [])
+  // useEffect(() => {
+  //   loadFilters()
+  // }, [])
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -64,7 +64,7 @@ function App() {
 
   const handleUploadSuccess = async () => {
     // Refresh filters after upload
-    await loadFilters()
+    // await loadFilters()
     // Optionally refresh stats if shown
     if (showStats) {
       // Stats component will handle its own refresh
