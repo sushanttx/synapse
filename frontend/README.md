@@ -146,3 +146,4 @@ The frontend communicates with the FastAPI backend via the `/search` endpoint:
 
 
 
+

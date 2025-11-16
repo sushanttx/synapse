@@ -53,7 +53,7 @@ function App() {
       };
 
       checkBackend(); // Check immediately on load
-      const intervalId = setInterval(checkBackend, 30000); // Check every 30 seconds
+      const intervalId = setInterval(checkBackend, 300000); // Check every 30 seconds
 
       return () => clearInterval(intervalId); // Cleanup interval on unmount
     }, []); // Empty array ensures this runs only once on mount
