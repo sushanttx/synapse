@@ -5,7 +5,8 @@ Provides semantic search endpoint for marketing documents
 
 # Patch websockets before importing supabase
 import websockets_patch  # noqa: F401
-
+# Add this import
+import aiofiles
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -20,6 +21,9 @@ import uvicorn
 from dotenv import load_dotenv
 import pdfplumber
 from docx import Document
+from fastapi.staticfiles import StaticFiles
+# Import the Supabase error class
+from postgrest.exceptions import APIError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -53,6 +57,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# This line "mounts" the demo_documents folder so it's accessible over the web
+DEMO_DOCUMENTS_DIR = "demo_documents"
+os.makedirs(DEMO_DOCUMENTS_DIR, exist_ok=True)
+app.mount("/demo_documents", StaticFiles(directory="demo_documents"), name="demo_documents")
 
 # Load the sentence transformer model (cache it globally)
 print("Loading sentence transformer model...")
@@ -63,7 +71,7 @@ print("Model loaded successfully!")
 # Request/Response models
 class SearchRequest(BaseModel):
     query: str
-    match_threshold: Optional[float] = 0.5
+    match_threshold: Optional[float] = 0.1
     match_count: Optional[int] = 10
     topic: Optional[str] = None
     project: Optional[str] = None
@@ -111,36 +119,46 @@ async def root():
 @app.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
     """
-    Semantic search endpoint
-    
-    Converts the user's query into an embedding and finds the most
-    semantically similar document chunks from the database.
-    Returns both individual chunks and results grouped by file.
+    Semantic search endpoint with CORRECTED LOGGING.
     """
+    print("\n" + "="*30)
+    print(f"🔥 NEW SEARCH REQUEST 🔥")
+    print(f"Query: {request.query}")
+    print(f"Topic Filter: {request.topic}")
+    print(f"Project Filter: {request.project}")
+    print(f"Threshold: {request.match_threshold}")
+    print("="*30)
+    
     try:
         # Generate embedding for the query
+        print("1. Encoding query...")
         query_embedding = model.encode(request.query).tolist()
+        print(f"   Done. Embedding starts with: {str(query_embedding)[:50]}...")
+
+        rpc_params = {
+            'query_embedding': query_embedding,
+            'match_threshold': request.match_threshold,
+            'match_count': request.match_count,
+            'filter_topic': request.topic,
+            'filter_project': request.project
+        }
         
-        # Call the RPC function
-        response = supabase.rpc(
-            'match_documents',
-            {
-                'query_embedding': query_embedding,
-                'match_threshold': request.match_threshold,
-                'match_count': request.match_count * 2  # Get more results to filter
-            }
-        ).execute()
+        # Calling the new V2 function to bypass cache
+        print("2. Calling database function 'match_documents_v2'...")
+        # A successful call returns a response object
+        # A failed call raises an APIError
+        response = supabase.rpc('match_documents_v2', rpc_params).execute()
         
-        # Filter results if topic/project filters are provided
+        print("\n--- DATABASE RESPONSE ---")
+        print("✅ Call Succeeded.")
+        print(f"Response Data: {response.data}")
+        print("---------------------------\n")
+
+        # The database now does all the filtering
         filtered_data = response.data if response.data else []
-        if request.topic:
-            filtered_data = [r for r in filtered_data if r.get('topic') == request.topic]
-        if request.project:
-            filtered_data = [r for r in filtered_data if r.get('project') == request.project]
         
-        # Limit to requested count after filtering
-        filtered_data = filtered_data[:request.match_count]
-        
+        print(f"3. Found {len(filtered_data)} matching chunks.")
+
         # Format individual chunk results
         results = [
             SearchResult(
@@ -201,6 +219,8 @@ async def search(request: SearchRequest):
             )
         ]
         
+        print("4. Formatting complete. Sending response.")
+
         return SearchResponse(
             results=results,
             files=files,
@@ -209,8 +229,38 @@ async def search(request: SearchRequest):
             total_files=len(files)
         )
         
+    except APIError as e:
+        print(f"💥💥💥 CAUGHT SUPABASE APIError 💥💥💥")
+        print(f"Code: {e.code}")
+        print(f"Message: {e.message}")
+        print(f"Details: {e.details}")
+        print(f"Hint: {e.hint}")
+        raise HTTPException(status_code=500, detail=f"Database Search Error: {e.message}")
     except Exception as e:
+        print(f"💥💥💥 CAUGHT GENERAL Exception 💥💥💥")
+        print(f"{type(e)}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@app.get("/testsearch/{query_text}")
+async def test_search(query_text: str):
+    """
+    A 'dumb' test to see if we can find new rows at all,
+    bypassing all vector logic. CORRECTED ERROR HANDLING.
+    """
+    print(f"🔥 DUMB SEARCH for: {query_text}")
+    try:
+        response = supabase.rpc('test_search', {'query_text': query_text}).execute()
+        
+        print(f"✅ DUMB SEARCH found {len(response.data)} rows.")
+        return {"results": response.data}
+        
+    except APIError as e:
+        print(f"❌ DUMB SEARCH FAILED (APIError): {e.message}")
+        return {"error": e.message}
+    except Exception as e:
+        print(f"💥 DUMB SEARCH CRASHED (Exception): {str(e)}")
+        return {"error": str(e)}
 
 
 @app.get("/topics")
@@ -351,7 +401,7 @@ def categorize_document(text: str, filename: str = "") -> Dict[str, Optional[str
     topic_scores = {"Strategy": 0, "Content": 0, "Report": 0, "Brief": 0}
     
     strategy_keywords = ["strategy", "strategic", "plan", "planning", "roadmap", "vision",
-                        "objective", "goal", "mission", "approach", "framework", "methodology"]
+                         "objective", "goal", "mission", "approach", "framework", "methodology"]
     for keyword in strategy_keywords:
         if keyword in combined_text:
             topic_scores["Strategy"] += 1
@@ -422,17 +472,25 @@ async def upload_file(
             detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
         )
     
+    # === MODIFIED: Define permanent save path ===
+    save_path = Path(DEMO_DOCUMENTS_DIR) / file.filename
+
     try:
-        # Save uploaded file to temporary location
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+        # === MODIFIED: Asynchronously read and write the file ===
+        try:
             content = await file.read()
-            tmp_file.write(content)
-            tmp_file_path = Path(tmp_file.name)
-        
+            async with aiofiles.open(save_path, 'wb') as out_file:
+                await out_file.write(content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+
+        # === MODIFIED: Process the file from its new permanent path ===
         try:
             # Extract text
-            text = extract_text(tmp_file_path)
+            text = extract_text(save_path)
             if not text.strip():
+                # Clean up the file if it's bad and we can't extract text
+                save_path.unlink(missing_ok=True) 
                 raise HTTPException(status_code=400, detail="No text could be extracted from the file")
             
             # Auto-categorize if topic/project not provided
@@ -461,8 +519,8 @@ async def upload_file(
             # Insert into Supabase
             response = supabase.table('documents').insert(records).execute()
             
-            # Clean up temporary file
-            tmp_file_path.unlink()
+            # === MODIFIED: We no longer delete the file ===
+            # tmp_file_path.unlink() # <-- This is gone!
             
             return {
                 "success": True,
@@ -474,17 +532,19 @@ async def upload_file(
             }
             
         except ValueError as e:
-            tmp_file_path.unlink()  # Clean up on error
+            # Clean up the saved file on a processing error
+            save_path.unlink(missing_ok=True) 
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            tmp_file_path.unlink()  # Clean up on error
+            # Clean up the saved file on a processing error
+            save_path.unlink(missing_ok=True)
             raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
             
     except Exception as e:
+        # This will catch the file save error
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
-
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
-
+    # Enable reload so changes are picked up
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

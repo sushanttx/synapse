@@ -212,7 +212,10 @@ function App() {
                 <div className="mb-4 flex items-start justify-between gap-4 pb-4 border-b border-slate-200">
                   <div className="flex-1">
                     <a
-                      href={`#${file.file_name}`}
+                      href={`${import.meta.env.VITE_API_BASE_URL}/${file.file_path}`}
+                      download={file.file_name}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-xl font-semibold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-2"
                     >
                       <svg

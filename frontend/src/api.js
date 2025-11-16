@@ -27,7 +27,7 @@ export async function searchDocuments(query, options = {}) {
       },
       body: JSON.stringify({
         query: query.trim(),
-        match_threshold: options.match_threshold || 0.5,
+        match_threshold: options.match_threshold || 0.1,
         match_count: options.match_count || 10,
         topic: options.topic || null,
         project: options.project || null,

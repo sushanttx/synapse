@@ -1,0 +1,37 @@
+Meeting: Project X - Technical Review & Q1 2025 Planning
+Date: 2024-12-10
+Attendees: [Product], [Engineering], [DevOps], [Marketing]
+
+--- AGENDA ---
+1. Review Project X performance metrics (post-launch)
+2. Discuss security & compliance feedback
+3. Plan Q1 2025 feature priorities
+4. Align on enterprise client onboarding flow
+
+--- NOTES ---
+
+1. Performance Metrics:
+- We are stable at 99.98% uptime. Great work by DevOps.
+- Sign-ups are strong, but trial-to-paid conversion is our key bottleneck.
+- Marketing attributes this to a clunky initial user experience (onboarding).
+
+2. Security Feedback:
+- We received two inquiries from large enterprise prospects about SOC 2 compliance.
+- We are NOT SOC 2 compliant yet. This is a blocker.
+- Engineering confirmed that our current data-at-rest encryption is solid.
+- ACTION (Engineering): Begin scoping the technical requirements and cost for SOC 2 Type 1 certification. Target a Q2 2025 audit.
+
+3. Q1 2025 Feature Priorities:
+- PRIORITY 1: "Onboarding Revamp." We must reduce time-to-value.
+- Product will lead a 2-week sprint to redesign the user's first 10 minutes. This is marketing's #1 request.
+- PRIORITY 2: "Advanced Reporting." This is a key feature to convert enterprise trials. It was pushed from Q4 2024.
+- PRIORITY 3: "SSO Integration (SAML)." This is a must-have for the enterprise clients we are targeting.
+
+4. Enterprise Onboarding Flow:
+- Current "self-serve" flow doesn't work for 500+ seat clients.
+- We need a dedicated "white-glove" onboarding path.
+- ACTION (Product): Define what "white-glove" means. Is it dedicated support? A custom setup?
+- ACTION (Marketing): Create a new landing page for "Project X Enterprise" to capture these leads separately.
+
+--- SUMMARY ---
+The Q1 2025 focus is clear: **Conversion**. This means fixing onboarding, adding key enterprise features (SSO, Reporting), and starting the SOC 2 compliance journey.
