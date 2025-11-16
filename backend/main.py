@@ -7,7 +7,7 @@ Provides semantic search endpoint for marketing documents
 import websockets_patch  # noqa: F401
 # Add this import
 import aiofiles
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
@@ -105,6 +105,11 @@ class SearchResponse(BaseModel):
     total_results: int
     total_files: int
 
+class HealthCheck(BaseModel):
+    """Response model for health check."""
+    status: str = "ok"
+
+
 
 @app.get("/")
 async def root():
@@ -114,6 +119,20 @@ async def root():
         "service": "Synapse API",
         "version": "1.0.0"
     }
+
+
+@app.get(
+    "/health",
+    tags=["Health Check"],
+    status_code=status.HTTP_200_OK,
+    response_model=HealthCheck,
+)
+def health_check():
+    """
+    Simple health check endpoint.
+    Returns 200 OK if the server is running.
+    """
+    return {"status": "ok"}
 
 
 @app.post("/search", response_model=SearchResponse)

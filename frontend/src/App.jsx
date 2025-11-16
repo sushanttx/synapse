@@ -16,6 +16,7 @@ function App() {
   const [topics, setTopics] = useState([])
   const [projects, setProjects] = useState([])
   const [showStats, setShowStats] = useState(false)
+  const [backendStatus, setBackendStatus] = useState('pending') // 'pending', 'online', 'offline'
 
   // Load topics and projects on mount
   // const loadFilters = async () => {
@@ -30,6 +31,32 @@ function App() {
   // useEffect(() => {
   //   loadFilters()
   // }, [])
+
+  useEffect(() => {
+      const checkBackend = async () => {
+        try {
+          // Use the same base URL as your API calls
+          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/health`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000), // 5-second timeout
+          });
+
+          if (response.ok) {
+            setBackendStatus('online');
+          } else {
+            setBackendStatus('offline');
+          }
+        } catch (err) {
+          // This catches network errors, timeouts, or a non-responsive server
+          setBackendStatus('offline');
+        }
+      };
+
+      checkBackend(); // Check immediately on load
+      const intervalId = setInterval(checkBackend, 30000); // Check every 30 seconds
+
+      return () => clearInterval(intervalId); // Cleanup interval on unmount
+    }, []); // Empty array ensures this runs only once on mount
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -89,14 +116,32 @@ function App() {
       <header className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-800">
-                Synapse: Marketing Search
+          <div>
+            <div className="flex items-center gap-3"> {/* This div groups the title and light */}
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+                Synapse: The Seeker
               </h1>
-              <p className="text-slate-600 mt-1">
-                Smart semantic search for your marketing documents
-              </p>
+              
+              {/* --- START: Backend Status Light --- */}
+              <div 
+                className={`w-3 h-3 rounded-full
+                  ${backendStatus === 'online' ? 'bg-green-500 animate-pulse' : ''}
+                  ${backendStatus === 'offline' ? 'bg-red-500' : ''}
+                  ${backendStatus === 'pending' ? 'bg-yellow-500' : ''}
+                `}
+                title={
+                  backendStatus === 'online' ? 'Backend Online' :
+                  backendStatus === 'offline' ? 'Backend Offline' :
+                  'Checking backend...'
+                }
+              />
+              {/* --- END: Backend Status Light --- */}
+
             </div>
+            <p className="text-gray-600 mt-1">
+              Smart semantic search for your documents.
+            </p>
+          </div>
             <button
               onClick={() => setShowStats(!showStats)}
               className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium"
@@ -122,6 +167,11 @@ function App() {
           topics={topics}
           projects={projects}
         />
+        <div className="mb-4 text-center text-sm text-yellow-800 bg-yellow-100 p-3 rounded-lg border border-yellow-200">
+          <strong>Note:</strong> Uploads are limited to small files (approx. 20KB) for this demo.
+          <br />
+          Large files may cause the free-tier backend to time out during processing.
+        </div>
 
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="mb-8">
